@@ -1,0 +1,12 @@
+# Terraform (session 3)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!example.tfvars
+
+# never
+*.pem
+*.key
+id_*

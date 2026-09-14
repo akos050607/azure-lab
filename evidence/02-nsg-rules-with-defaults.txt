@@ -1,0 +1,10 @@
+Name                           ResourceGroup    Priority    SourcePortRanges    SourceAddressPrefixes    SourceASG    Access    Protocol    Direction    DestinationPortRanges    DestinationAddressPrefixes    DestinationASG
+-----------------------------  ---------------  ----------  ------------------  -----------------------  -----------  --------  ----------  -----------  -----------------------  ----------------------------  ----------------
+allow-https                    rg-net-01        110         *                   Internet                 None         Allow     Tcp         Inbound      443                      *                             None
+allow-ssh                      rg-net-01        100         *                   <my-ip>/32         None         Allow     Tcp         Inbound      22                       *                             None
+AllowVnetInBound               rg-net-01        65000       *                   VirtualNetwork           None         Allow     *           Inbound      *                        VirtualNetwork                None
+AllowAzureLoadBalancerInBound  rg-net-01        65001       *                   AzureLoadBalancer        None         Allow     *           Inbound      *                        *                             None
+DenyAllInBound                 rg-net-01        65500       *                   *                        None         Deny      *           Inbound      *                        *                             None
+AllowVnetOutBound              rg-net-01        65000       *                   VirtualNetwork           None         Allow     *           Outbound     *                        VirtualNetwork                None
+AllowInternetOutBound          rg-net-01        65001       *                   *                        None         Allow     *           Outbound     *                        Internet                      None
+DenyAllOutBound                rg-net-01        65500       *                   *                        None         Deny      *           Outbound     *                        *                             None

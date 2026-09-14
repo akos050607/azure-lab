@@ -1,0 +1,6 @@
+# az network watcher test-ip-flow, with allow-ssh deleted
+# (captured during the break-it step; re-run after restore gave securityRules/allow-ssh)
+{
+  "access": "Deny",
+  "ruleName": "defaultSecurityRules/DenyAllInBound"
+}

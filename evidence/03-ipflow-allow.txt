@@ -1,0 +1,4 @@
+{
+  "access": "Allow",
+  "ruleName": "securityRules/allow-ssh"
+}

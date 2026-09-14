@@ -1,0 +1,16 @@
+Three TCP connects to the same VM, same session, measured — not read.
+
+  target      NSG state                        result
+  ----------  -------------------------------  --------------------------------------
+  :22         allow-ssh present                CONNECTED in 0.04s
+                                               banner: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.18
+  :22         allow-ssh DELETED                TIMEOUT after 12.0s  (packet dropped)
+  :8080       no rule, falls to DenyAllInBound TIMEOUT after 12.0s  (packet dropped)
+  :22         allow-ssh restored               CONNECTED in 0.02s
+
+An NSG DROPS. Nothing answers, so the client waits out its own timeout.
+A REFUSED connection is the opposite signal: something replied with a RST, so the
+host is reachable and nothing is listening -> an application problem.
+
+  timeout  -> suspect the network
+  refused  -> suspect the process

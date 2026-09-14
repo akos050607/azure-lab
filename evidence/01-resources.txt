@@ -1,0 +1,8 @@
+Name                                              ResourceGroup    Location            Type                                     Status
+------------------------------------------------  ---------------  ------------------  ---------------------------------------  ---------
+vnet-lab                                          rg-net-01        germanywestcentral  Microsoft.Network/virtualNetworks        Succeeded
+nsg-app                                           rg-net-01        germanywestcentral  Microsoft.Network/networkSecurityGroups  Succeeded
+pip-app                                           rg-net-01        germanywestcentral  Microsoft.Network/publicIPAddresses      Succeeded
+nic-app                                           rg-net-01        germanywestcentral  Microsoft.Network/networkInterfaces      Succeeded
+vm-app                                            rg-net-01        germanywestcentral  Microsoft.Compute/virtualMachines        Succeeded
+vm-app_OsDisk_1_67fab5493bdd4a8b9e78d6725ce661fe  RG-NET-01        germanywestcentral  Microsoft.Compute/disks                  Succeeded

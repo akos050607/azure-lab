@@ -1,0 +1,10 @@
+Standard_B1s           vCPU=1   RAM=1GB
+    type=Location  reason=NotAvailableForSubscription  zones=None
+    type=Zone      reason=NotAvailableForSubscription  zones=['1', '2', '3']
+Standard_B2s           vCPU=2   RAM=4GB
+    type=Location  reason=NotAvailableForSubscription  zones=None
+    type=Zone      reason=NotAvailableForSubscription  zones=['1', '2', '3']
+Standard_D2als_v7      vCPU=2   RAM=4GB
+    type=Zone      reason=NotAvailableForSubscription  zones=['2']
+Standard_D2as_v5       vCPU=2   RAM=8GB
+    type=Zone      reason=NotAvailableForSubscription  zones=['2']
