@@ -1,0 +1,15 @@
+terraform plan — 10 resources to create
+
+ADDRESS                                                TYPE
+azurerm_linux_virtual_machine.app                      azurerm_linux_virtual_machine
+azurerm_network_interface.app                          azurerm_network_interface
+azurerm_network_security_group.app                     azurerm_network_security_group
+azurerm_network_security_rule.https                    azurerm_network_security_rule
+azurerm_network_security_rule.ssh                      azurerm_network_security_rule
+azurerm_public_ip.app                                  azurerm_public_ip
+azurerm_resource_group.lab                             azurerm_resource_group
+azurerm_subnet.app                                     azurerm_subnet
+azurerm_subnet_network_security_group_association.app  azurerm_subnet_network_security_group_association
+azurerm_virtual_network.lab                            azurerm_virtual_network
+
+Plan: 10 to add, 0 to change, 0 to destroy.

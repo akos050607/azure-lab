@@ -13,7 +13,7 @@ machine is infrastructure you cannot prove anything about.
 |---|---|---|
 | 1 | Subscription, resource group, region, one VM, blast-radius delete | done |
 | **2** | **VNet, subnet, NSG, public IP, NIC, VM — assembled piece by piece** | **done, this commit** |
-| 3 | The same network declared in Terraform with `azurerm` | next |
+| **3** | **The same network declared in Terraform with `azurerm`** | **done, this commit** |
 | 4 | k3s on an Azure VM — what changes versus Hetzner | planned |
 | 5 | Managed identity + Key Vault, no secret on the box | planned |
 
@@ -135,6 +135,106 @@ below an allow-internet rule.
 
 NSGs are **stateful**: allow inbound 443 and the reply leaves without an outbound
 rule.
+
+---
+
+## Session 3 — the same network, declared
+
+Session 2's eight `az` commands, rewritten as HCL. `terraform apply` produced a
+network that behaves identically, and `terraform destroy` removed all of it.
+
+```bash
+cp example.tfvars terraform.tfvars   # subscription id + your own IP
+terraform init
+terraform plan -out=tfplan           # 10 to add, 0 to change, 0 to destroy
+terraform apply tfplan
+ssh akos@$(terraform output -raw public_ip)
+terraform destroy
+```
+
+### Ten resources for one machine
+
+`az vm create` hides this; Terraform cannot. The same VM that is **one**
+`hcloud_server` on Hetzner is ten declarations here:
+
+```
+azurerm_resource_group.lab
+azurerm_virtual_network.lab
+azurerm_subnet.app
+azurerm_network_security_group.app
+azurerm_network_security_rule.ssh
+azurerm_network_security_rule.https
+azurerm_subnet_network_security_group_association.app
+azurerm_public_ip.app
+azurerm_network_interface.app
+azurerm_linux_virtual_machine.app
+```
+
+That verbosity is not Terraform being awkward. Azure genuinely models the
+network card and the public address as separate things with their own
+lifecycles — which is also why deleting a VM alone leaves you paying for its
+disk and its IP.
+
+### The association is its own resource, and that is the point
+
+`azurerm_subnet` will happily accept a `network_security_group_id` inline. Set it
+there **and** declare `azurerm_subnet_network_security_group_association` and
+every apply flaps: one writer sets the field, the other clears it, forever.
+Terraform reports a diff on every run and neither side is wrong — they simply
+both believe they own that field.
+
+That is the same failure as an HPA and a Deployment both owning `replicas`, and
+as CI running `kubectl apply` into a cluster Argo CD reconciles. **One writer per
+field**, and the rule holds across tools.
+
+The check that proves it:
+
+```
+$ terraform plan -detailed-exitcode
+No changes. Your infrastructure matches the configuration.
+exit code: 0
+```
+
+An empty second plan is the evidence. A config with two owners can never produce
+one.
+
+### Two things azurerm 4 will not let you skip
+
+**`features {}`** — required even when empty. It is where provider-wide
+behaviours live, such as whether `destroy` may remove a non-empty resource group.
+
+**`subscription_id`** — mandatory from v4 onward. Earlier versions silently
+inherited whatever `az login` had selected, which is a pleasant default right up
+until it applies to the wrong subscription.
+
+### How this would authenticate without a human
+
+Today Terraform is borrowing the `az login` session, which is fine on a laptop
+and useless in a pipeline. The two real answers:
+
+- A **service principal** — `az ad sp create-for-rbac --role Contributor --scopes /subscriptions/<id>` — supplying the four `ARM_*` environment variables. A long-lived credential that has to live in a secret store.
+- **OIDC federation** from GitHub Actions, where the workflow exchanges a short-lived GitHub token for an Azure one and **no secret is stored at all**.
+
+The second is the same idea as the managed identity in Session 5 and the same
+idea as the GitOps pipeline in `homelab-gitops` holding no cluster credential:
+the strongest secret is the one that never exists.
+
+### hcloud versus azurerm
+
+| | `hcloud` (homelab-platform) | `azurerm` (here) |
+|---|---|---|
+| Auth | API token in an env var | `az login`, service principal, or OIDC federation |
+| Grouping | Project — created in the portal, not declarable | Resource group — a declarable resource with its own lifecycle |
+| A server is… | one `hcloud_server` | ten resources |
+| Firewall | `hcloud_firewall` attached to the server | NSG at subnet **or** NIC, priority-ordered, with undeletable defaults |
+| Provisioning | `user_data` | `custom_data`, base64-encoded |
+| Sizing | any type, any location | **restricted per subscription and per zone** — see FAILURES.md |
+| State | local, no locking (ADR-001) | same here today; the production answer is a storage-account backend using blob leases |
+
+The row that actually cost time was sizing. On Hetzner a server type either
+exists or it does not. On Azure it can exist, be documented, be listed by the
+CLI, and still be unavailable to your particular subscription in your particular
+zone.
 
 ---
 

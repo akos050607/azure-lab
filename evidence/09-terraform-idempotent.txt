@@ -1,0 +1,17 @@
+A second `terraform plan` immediately after apply:
+
+  $ terraform plan -detailed-exitcode
+  No changes. Your infrastructure matches the configuration.
+  exit code: 0        (0 = no changes, 1 = error, 2 = drift)
+
+This is the check that catches the two-writers bug. azurerm_subnet also accepts
+a network_security_group_id inline. Set it there AND declare
+azurerm_subnet_network_security_group_association and this plan is never empty:
+each apply, one writer sets the field and the other clears it, forever.
+
+Exit code 0 is the proof that exactly one resource owns that field.
+
+Behaviour matched the hand-built Session 2 network exactly:
+
+  :22    CONNECTED in 0.02s   SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.18
+  :8080  TIMEOUT after 12.0s  (falls through to DenyAllInBound)

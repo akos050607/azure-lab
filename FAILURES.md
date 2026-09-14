@@ -128,3 +128,38 @@ Priority 100–4096 is yours; 65000+ are Azure's. Lowest number wins and the fir
 match stops evaluation, so a default can only be overridden by a lower-numbered
 rule, never removed. Note outbound is allowed by default — the deny-all sits
 *below* an allow-internet rule.
+
+## 2026-09-14 — Session 3, Terraform
+
+### 4 · `description` in an `output` block cannot use variables
+
+```
+Error: Variables not allowed
+  on outputs.tf line 2, in output "public_ip":
+   2:   description = "ssh ${var.admin_username}@$(terraform output -raw public_ip)"
+```
+
+Trivial, but worth recording because the reason is not arbitrary: `description`
+is documentation metadata, read by `terraform providers schema` and by docs
+tooling without evaluating anything. It has to be a constant string. Interpolate
+in `value`, never in `description`.
+
+### Non-failures worth keeping
+
+**The second plan was empty on the first try.** That was the outcome being aimed
+for rather than luck — `azurerm_subnet` accepts an inline NSG id, and using it
+*as well as* the association resource is the documented way to get a config that
+diffs forever. Declaring the association only, and then checking
+`terraform plan -detailed-exitcode` returns 0, is what turns "I think this is
+right" into "I verified it".
+
+**Ten resources, not eight.** Session 2 was eight `az` commands, but the plan
+shows ten: the two NSG rules and the subnet↔NSG association are separate
+resources in Terraform where `az` folded them into the commands that created
+their parents. The count only matches once you stop thinking in commands and
+start thinking in objects.
+
+**The behaviour matched exactly.** Same probes as Session 2 against the declared
+network: `:22` connected in 0.02 s, `:8080` timed out after 12 s. The point of
+Session 3 is not that Terraform can make a VM — it is that the declared thing is
+the same thing.
