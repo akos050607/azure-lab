@@ -1,0 +1,51 @@
+Managed identity + Key Vault, run from inside the VM.
+The VM has NO inbound ports open; commands went via the Azure control plane.
+
+STEP 1 — the instance metadata endpoint, WITHOUT the required header
+  GET http://169.254.169.254/metadata/identity/oauth2/token?...
+  HTTP 400
+  {"error":"invalid_request","error_description":"Required metadata header not specified"}
+
+  This is the SSRF defence. 169.254.169.254 is a link-local address every VM can
+  reach, which makes it the classic target for server-side request forgery: trick
+  an application into fetching a URL and it hands you a cloud credential. Azure
+  requires a header a naive "fetch this URL for me" bug will never send.
+
+STEP 2 — with Metadata:true
+  HTTP 200, access_token 1788 chars. Claims inside it:
+
+    aud        cfa8b339-...        the Key Vault service — the token is only for this
+    iss        https://sts.windows.net/<tenant>/
+    oid        0a168d9b-...        the managed identity's object id
+    xms_mirid  /subscriptions/<sub>/resourcegroups/rg-id-01/providers/
+               Microsoft.Compute/virtualMachines/vm-id
+
+  xms_mirid is worth noticing: the token names the machine it was issued to.
+
+STEP 3 — read the secret, BEFORE any role assignment
+  HTTP 403
+  "Caller is not authorized to perform action on resource."
+
+  Authenticated and refused. Azure knew exactly which VM was asking and said no.
+  Authentication and authorization are two separate checks, and this is what it
+  looks like to pass the first and fail the second.
+
+STEP 4 — assign "Key Vault Secrets User", scoped to this one vault, then retry
+  READ   HTTP 200   value: 'it-works'
+  WRITE  HTTP 403   Forbidden
+
+  The write failing is the point. The role grants reading secrets and nothing
+  else — not writing, not managing the vault. Least privilege, demonstrated
+  rather than asserted.
+
+STEP 5 — what credential is stored on the machine?
+  /home/akos/.azure   does not exist
+  /root/.azure        does not exist
+  /etc/azure          does not exist
+  env vars in a login shell matching AZURE|ARM_|SECRET:  0
+
+  (A grep inside the run-command environment shows six AZURE_GUEST_AGENT_*
+  variables. Those belong to the Azure agent running the command, not to the
+  identity, and a normal login shell has none. Checked rather than assumed.)
+
+  There is no credential on the box to steal, expire, or forget to rotate.

@@ -15,7 +15,7 @@ machine is infrastructure you cannot prove anything about.
 | **2** | **VNet, subnet, NSG, public IP, NIC, VM — assembled piece by piece** | **done, this commit** |
 | **3** | **The same network declared in Terraform with `azurerm`** | **done, this commit** |
 | 4 | k3s on an Azure VM — what changes versus Hetzner | planned |
-| 5 | Managed identity + Key Vault, no secret on the box | planned |
+| **5** | **Managed identity + Key Vault, no secret on the box** | **done, this commit** |
 
 ---
 
@@ -235,6 +235,107 @@ The row that actually cost time was sizing. On Hetzner a server type either
 exists or it does not. On Azure it can exist, be documented, be listed by the
 CLI, and still be unavailable to your particular subscription in your particular
 zone.
+
+---
+
+## Session 5 — a secret on the machine, without a secret on the machine
+
+The most useful forty-five minutes here, because it is the one that is about
+identity rather than about Azure.
+
+A **managed identity** is a service principal in Entra ID whose credential Azure
+creates, rotates and destroys on your behalf. The VM asks a link-local address
+for a token; nothing is stored on disk. Confirmed in Entra ID as
+`type: ManagedIdentity`, named after the VM it belongs to.
+
+The VM for this session was created with **`--nsg-rule NONE`** — no inbound port
+open at all. Every command ran through the Azure control plane
+(`az vm run-command invoke`), which is itself the point: reaching a machine and
+reaching a machine *over the network* are different things.
+
+### The sequence, and what each step proves
+
+**1 · The metadata endpoint refuses a request without a specific header**
+
+```
+GET http://169.254.169.254/metadata/identity/oauth2/token?...
+HTTP 400  {"error":"invalid_request","error_description":"Required metadata header not specified"}
+```
+
+`169.254.169.254` is link-local — every VM can reach it, and nothing outside can.
+That makes it the classic **SSRF** target: trick an application into fetching a
+URL and it hands back a cloud credential. Requiring `Metadata: true` means a
+naive "fetch this URL for me" bug never gets there, because it has no reason to
+set the header.
+
+**2 · With the header, a token — and the token names the machine**
+
+```
+aud        the Key Vault service      — this token is good for nothing else
+iss        https://sts.windows.net/<tenant>/
+oid        the managed identity's object id
+xms_mirid  /subscriptions/<sub>/resourcegroups/rg-id-01/providers/
+           Microsoft.Compute/virtualMachines/vm-id
+```
+
+**3 · Reading the secret before any role assignment**
+
+```
+HTTP 403   "Caller is not authorized to perform action on resource."
+```
+
+**Authenticated, and refused.** Azure knew exactly which VM was asking and said
+no anyway. Having an identity and being allowed to do something are two separate
+checks, and this is what passing the first and failing the second looks like.
+
+**4 · After `Key Vault Secrets User`, scoped to this one vault**
+
+```
+READ   HTTP 200   value: 'it-works'
+WRITE  HTTP 403   Forbidden
+```
+
+The write failing is the part worth pointing at. The role grants reading secrets
+and nothing else — not writing, not managing the vault. Least privilege shown,
+not claimed.
+
+**5 · What credential is on the box?**
+
+```
+/home/akos/.azure   does not exist
+/root/.azure        does not exist
+env vars in a login shell matching AZURE|ARM_|SECRET:   0
+```
+
+Nothing to steal, nothing to expire, nothing to forget to rotate.
+
+### The same idea, in three places
+
+| | Kubernetes | Azure |
+|---|---|---|
+| The identity | ServiceAccount | managed identity |
+| Permissions | Role | role definition |
+| Granting them | RoleBinding | role assignment |
+| Limiting reach | namespace vs cluster-scoped | `--scope` — one vault, not the subscription |
+
+Which is why `automountServiceAccountToken: false` on the `oidc-demo` Deployment
+in `homelab-gitops` and `--scope <one vault>` here are the same decision. Least
+privilege with one mental model in two clouds.
+
+It also repairs the weakest part of the secrets story. Sealed Secrets keeps
+ciphertext out of git, but the secret still exists and still has to be rotated.
+A managed identity means **no secret exists at all** — which is the same
+reasoning as OIDC federation for Terraform in Session 3, and as the GitOps
+pipeline holding no cluster credential.
+
+### One Key Vault detail worth knowing
+
+The vault was created with `--enable-rbac-authorization true`, which is the
+modern mode. In it, **being subscription Owner does not grant access to the
+secrets inside** — that is a data-plane permission and needs its own role
+assignment. I had to grant myself `Key Vault Secrets Officer` before I could
+write the demo secret. Management-plane and data-plane are separate, and
+conflating them is a common source of "but I'm an admin, why can't I read this".
 
 ---
 

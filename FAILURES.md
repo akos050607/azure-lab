@@ -163,3 +163,60 @@ start thinking in objects.
 network: `:22` connected in 0.02 s, `:8080` timed out after 12 s. The point of
 Session 3 is not that Terraform can make a VM — it is that the declared thing is
 the same thing.
+
+## 2026-09-14 — Session 5, managed identity
+
+### 5 · `az group delete` did not delete the Key Vault
+
+The resource group was deleted and `az group list` came back clean. The vault was
+still there:
+
+```
+$ az keyvault list-deleted
+  name           kv-akos-15238
+  deletion date  2026-09-14T19:14:22+00:00
+  purge due      2026-12-13T19:14:22+00:00
+```
+
+**Key Vault soft-delete is on by default and cannot be turned off.** Deleting the
+vault — or the resource group containing it — moves it to a recoverable state for
+90 days rather than destroying it. Two consequences, and both matter:
+
+- **The name stays reserved.** Vault names are globally unique across all of
+  Azure, so `kv-akos-15238` could not be recreated until the soft-deleted copy
+  was purged.
+- **The secret is still recoverable.** Anyone with the right permission can
+  restore that vault and read `demo-secret` for the next three months. "I deleted
+  it" and "it is gone" are not the same statement.
+
+Fixed with `az keyvault purge -n <name> --location <region>`, which is
+irreversible and is the only thing that actually destroys it.
+
+This is a real correction to the guardrail in the README. "Always delete the
+resource group, never the individual resource" is right about billing and
+incomplete about data: some resource types survive their own resource group.
+
+### 6 · Being subscription Owner is not enough to read a secret
+
+The vault was created with `--enable-rbac-authorization true`. Writing the demo
+secret failed until an explicit `Key Vault Secrets Officer` assignment was made —
+to my own user, on an account that already owns the subscription.
+
+Not a bug. Key Vault separates the **management plane** (create/configure the
+vault — Owner covers this) from the **data plane** (read/write the secrets inside
+— needs its own role). Conflating them is where "but I'm an admin, why can't I
+read this" comes from.
+
+### Non-failures worth keeping
+
+**The credential check was worth running rather than asserting.** Grepping the
+VM's environment for `AZURE|ARM_|SECRET` returned six matches, which looks
+alarming. All six are `AZURE_GUEST_AGENT_*` variables belonging to the agent
+executing the command, and a normal login shell has zero. The claim "there is no
+credential on the box" survived being checked — but it was worth checking before
+saying it out loud.
+
+**403 before the role assignment was the point, not an obstacle.** Requesting the
+token succeeded and reading the secret failed, which is authentication passing
+and authorization failing as two visibly separate events. Worth doing in that
+order deliberately rather than assigning the role up front.

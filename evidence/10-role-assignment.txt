@@ -1,0 +1,2 @@
+role : Key Vault Secrets User
+scope: /subscriptions/<subscription-id>/resourceGroups/rg-id-01/providers/Microsoft.KeyVault/vaults/<vault>
